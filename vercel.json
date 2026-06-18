@@ -1,7 +1,9 @@
 {
   "buildCommand": "pnpm --filter @workspace/inventory-app run build",
   "outputDirectory": "artifacts/inventory-app/dist/public",
+  "cleanUrls": true,
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index.py" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
