@@ -1,5 +1,5 @@
 {
-  "buildCommand": "pnpm --filter @workspace/inventory-app run build && rm -rf public && cp -r artifacts/inventory-app/dist/public public",
+  "buildCommand": "pnpm --filter @workspace/inventory-app run build",
   "installCommand": "pnpm install",
   "outputDirectory": "public",
   "cleanUrls": true,
