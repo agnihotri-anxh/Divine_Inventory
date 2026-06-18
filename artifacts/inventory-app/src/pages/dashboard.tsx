@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Package, Warehouse, AlertTriangle, ShoppingCart, RotateCcw,
-  ClipboardCheck, Bell, TrendingUp, ArrowUpRight, ArrowDownRight, RefreshCw
+  ClipboardCheck, Bell, TrendingUp, RefreshCw
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -20,9 +20,11 @@ const MOVEMENT_COLORS: Record<string, string> = {
   TRANSFER_OUT: "bg-orange-100 text-orange-700",
 };
 
-function MetricCard({ label, value, icon: Icon, color, sub }: { label: string; value: number | undefined; icon: any; color: string; sub?: string }) {
+function MetricCard({ label, value, icon: Icon, color, sub }: {
+  label: string; value: number | undefined; icon: any; color: string; sub?: string
+}) {
   return (
-    <Card className="hover-elevate border border-card-border" data-testid={`card-metric-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+    <Card className="border border-card-border" data-testid={`card-metric-${label.toLowerCase().replace(/\s+/g, "-")}`}>
       <CardContent className="pt-5 pb-4 px-5">
         <div className="flex items-start justify-between">
           <div>
@@ -44,23 +46,29 @@ function MetricCard({ label, value, icon: Icon, color, sub }: { label: string; v
 }
 
 export default function Dashboard() {
-  const { data: summary, isLoading: summaryLoading } = useGetDashboardSummary();
-  const { data: lowStock, isLoading: lowStockLoading } = useGetLowStockItems();
-  const { data: activity, isLoading: activityLoading } = useGetRecentActivity({ limit: 15 });
-  const { data: breakdown, isLoading: breakdownLoading } = useGetWarehouseBreakdown();
+  const { data: rawSummary } = useGetDashboardSummary();
+  const { data: rawLowStock, isLoading: lowStockLoading } = useGetLowStockItems();
+  const { data: rawActivity, isLoading: activityLoading } = useGetRecentActivity({ limit: 15 });
+  const { data: rawBreakdown, isLoading: breakdownLoading } = useGetWarehouseBreakdown();
+
+  // FastAPI returns snake_case — cast to any for safe access
+  const summary = rawSummary as any;
+  const lowStock = (rawLowStock as any[]) ?? [];
+  const activity = (rawActivity as any[]) ?? [];
+  const breakdown = (rawBreakdown as any[]) ?? [];
 
   return (
     <div className="space-y-6">
       {/* Metrics Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard label="Total SKUs" value={summary?.totalSkus} icon={Package} color="bg-primary/10 text-primary" />
-        <MetricCard label="Available Units" value={summary?.totalAvailableUnits} icon={TrendingUp} color="bg-emerald-100 text-emerald-700" />
-        <MetricCard label="Low Stock" value={summary?.lowStockCount} icon={AlertTriangle} color="bg-amber-100 text-amber-700" sub="Below minimum" />
-        <MetricCard label="Active Alerts" value={summary?.activeAlerts} icon={Bell} color="bg-red-100 text-red-700" />
-        <MetricCard label="Pending Dispatches" value={summary?.pendingDispatches} icon={ShoppingCart} color="bg-violet-100 text-violet-700" />
-        <MetricCard label="Today's Returns" value={summary?.todayReturns} icon={RotateCcw} color="bg-blue-100 text-blue-700" />
-        <MetricCard label="Pending QC" value={summary?.pendingQcCount} icon={RefreshCw} color="bg-orange-100 text-orange-700" />
-        <MetricCard label="Pending Recon." value={summary?.pendingReconciliations} icon={ClipboardCheck} color="bg-cyan-100 text-cyan-700" />
+        <MetricCard label="Total SKUs" value={summary?.total_skus} icon={Package} color="bg-primary/10 text-primary" />
+        <MetricCard label="Available Units" value={summary?.total_available_units} icon={TrendingUp} color="bg-emerald-100 text-emerald-700" />
+        <MetricCard label="Low Stock" value={summary?.low_stock_count} icon={AlertTriangle} color="bg-amber-100 text-amber-700" sub="Below minimum" />
+        <MetricCard label="Active Alerts" value={summary?.active_alerts} icon={Bell} color="bg-red-100 text-red-700" />
+        <MetricCard label="Pending Dispatches" value={summary?.pending_dispatches} icon={ShoppingCart} color="bg-violet-100 text-violet-700" />
+        <MetricCard label="Today's Returns" value={summary?.today_returns} icon={RotateCcw} color="bg-blue-100 text-blue-700" />
+        <MetricCard label="Pending QC" value={summary?.pending_qc_count} icon={RefreshCw} color="bg-orange-100 text-orange-700" />
+        <MetricCard label="Pending Recon." value={summary?.pending_reconciliations} icon={ClipboardCheck} color="bg-cyan-100 text-cyan-700" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -73,7 +81,7 @@ export default function Dashboard() {
                   <AlertTriangle className="w-4 h-4 text-amber-500" />
                   Low Stock Alerts
                 </CardTitle>
-                {lowStock && <Badge variant="secondary">{lowStock.length} items</Badge>}
+                {lowStock.length > 0 && <Badge variant="secondary">{lowStock.length} items</Badge>}
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -81,7 +89,7 @@ export default function Dashboard() {
                 <div className="space-y-2 px-5 pb-4">
                   {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
                 </div>
-              ) : !lowStock?.length ? (
+              ) : !lowStock.length ? (
                 <div className="text-center py-10 text-muted-foreground text-sm">All stock levels are healthy</div>
               ) : (
                 <div className="overflow-x-auto">
@@ -96,15 +104,13 @@ export default function Dashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {lowStock.map((item, i) => (
-                        <tr key={i} className="border-b border-border/50 hover:bg-muted/20 transition-colors" data-testid={`row-low-stock-${i}`}>
-                          <td className="px-5 py-2.5 font-mono text-xs text-primary font-medium">{item.skuCode}</td>
-                          <td className="px-3 py-2.5 text-foreground">{item.productName}</td>
-                          <td className="px-3 py-2.5 text-muted-foreground text-xs">{item.warehouseName}</td>
-                          <td className="px-5 py-2.5 text-right">
-                            <span className="font-semibold text-red-600">{item.availableQty}</span>
-                          </td>
-                          <td className="px-5 py-2.5 text-right text-muted-foreground">{item.minimumStock}</td>
+                      {lowStock.map((item: any, i: number) => (
+                        <tr key={i} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                          <td className="px-5 py-2.5 font-mono text-xs text-primary font-medium">{item.sku_code}</td>
+                          <td className="px-3 py-2.5 text-foreground">{item.product_name}</td>
+                          <td className="px-3 py-2.5 text-muted-foreground text-xs">{item.warehouse_name}</td>
+                          <td className="px-5 py-2.5 text-right"><span className="font-semibold text-red-600">{item.available_qty}</span></td>
+                          <td className="px-5 py-2.5 text-right text-muted-foreground">{item.minimum_stock}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -126,33 +132,31 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className="space-y-3">
               {breakdownLoading ? (
-                <div className="space-y-2">
-                  {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
-                </div>
-              ) : !breakdown?.length ? (
+                <div className="space-y-2">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}</div>
+              ) : !breakdown.length ? (
                 <p className="text-sm text-muted-foreground text-center py-6">No warehouses found</p>
               ) : (
-                breakdown.map((wh) => (
-                  <div key={wh.warehouseId} className="rounded-lg border border-border p-3 space-y-1.5" data-testid={`card-warehouse-${wh.warehouseId}`}>
+                breakdown.map((wh: any) => (
+                  <div key={wh.warehouse_id} className="rounded-lg border border-border p-3 space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-foreground">{wh.warehouseName}</p>
-                      <Badge variant="outline" className="text-[10px]">{wh.warehouseType}</Badge>
+                      <p className="text-sm font-medium text-foreground">{wh.warehouse_name}</p>
+                      <Badge variant="outline" className="text-[10px]">{wh.warehouse_type}</Badge>
                     </div>
                     <div className="grid grid-cols-3 gap-1 text-xs">
                       <div>
                         <p className="text-muted-foreground">Available</p>
-                        <p className="font-semibold text-emerald-600">{wh.totalAvailable}</p>
+                        <p className="font-semibold text-emerald-600">{wh.total_available}</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Reserved</p>
-                        <p className="font-semibold text-amber-600">{wh.totalReserved}</p>
+                        <p className="font-semibold text-amber-600">{wh.total_reserved}</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Damaged</p>
-                        <p className="font-semibold text-red-600">{wh.totalDamaged}</p>
+                        <p className="font-semibold text-red-600">{wh.total_damaged}</p>
                       </div>
                     </div>
-                    <p className="text-[10px] text-muted-foreground">{wh.skuCount} SKUs tracked</p>
+                    <p className="text-[10px] text-muted-foreground">{wh.sku_count} SKUs tracked</p>
                   </div>
                 ))
               )}
@@ -168,10 +172,8 @@ export default function Dashboard() {
         </CardHeader>
         <CardContent className="p-0">
           {activityLoading ? (
-            <div className="space-y-2 px-5 pb-4">
-              {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
-            </div>
-          ) : !activity?.length ? (
+            <div className="space-y-2 px-5 pb-4">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+          ) : !activity.length ? (
             <div className="text-center py-10 text-muted-foreground text-sm">No recent activity</div>
           ) : (
             <div className="overflow-x-auto">
@@ -187,19 +189,19 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {activity.map((m) => (
-                    <tr key={m.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors" data-testid={`row-activity-${m.id}`}>
+                  {activity.map((m: any) => (
+                    <tr key={m.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
                       <td className="px-5 py-2.5">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${MOVEMENT_COLORS[m.movementType] ?? "bg-gray-100 text-gray-700"}`}>
-                          {m.movementType}
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${MOVEMENT_COLORS[m.movement_type] ?? "bg-gray-100 text-gray-700"}`}>
+                          {m.movement_type}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 text-foreground max-w-[160px] truncate">{m.product?.productName}</td>
-                      <td className="px-3 py-2.5 text-muted-foreground text-xs">{m.warehouse?.warehouseName}</td>
+                      <td className="px-3 py-2.5 text-foreground max-w-[160px] truncate">{m.product?.product_name}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground text-xs">{m.warehouse?.warehouse_name}</td>
                       <td className="px-3 py-2.5 text-right font-semibold text-foreground">{m.qty}</td>
-                      <td className="px-5 py-2.5 text-muted-foreground text-xs">{m.referenceId}</td>
+                      <td className="px-5 py-2.5 text-muted-foreground text-xs">{m.reference_id ?? "—"}</td>
                       <td className="px-5 py-2.5 text-right text-muted-foreground text-xs whitespace-nowrap">
-                        {formatDistanceToNow(new Date(m.createdAt), { addSuffix: true })}
+                        {m.created_at ? formatDistanceToNow(new Date(m.created_at), { addSuffix: true }) : "—"}
                       </td>
                     </tr>
                   ))}
