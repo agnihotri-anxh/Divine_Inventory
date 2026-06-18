@@ -1,0 +1,7 @@
+{
+  "buildCommand": "pnpm --filter @workspace/inventory-app run build",
+  "outputDirectory": "artifacts/inventory-app/dist/public",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

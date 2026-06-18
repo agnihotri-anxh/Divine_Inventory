@@ -2,6 +2,7 @@ import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { setBaseUrl } from "@workspace/api-client-react";
 import Layout from "@/components/Layout";
 import Dashboard from "@/pages/dashboard";
 import Inventory from "@/pages/inventory";
@@ -12,6 +13,12 @@ import Returns from "@/pages/returns";
 import Reconciliation from "@/pages/reconciliation";
 import Alerts from "@/pages/alerts";
 import NotFound from "@/pages/not-found";
+
+// In production (Vercel/Netlify) set VITE_API_URL to your Render backend URL.
+// In development (Replit or local) leave it unset — relative /api paths work fine.
+if (import.meta.env.VITE_API_URL) {
+  setBaseUrl(import.meta.env.VITE_API_URL as string);
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
