@@ -159,7 +159,7 @@ importers:
         version: 5.9.3
 
   artifacts/inventory-app:
-    devDependencies:
+    dependencies:
       '@hookform/resolvers':
         specifier: ^3.10.0
         version: 3.10.0(react-hook-form@7.75.0(react@19.1.0))
