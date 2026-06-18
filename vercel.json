@@ -1,5 +1,6 @@
 {
   "buildCommand": "pnpm --filter @workspace/inventory-app run build",
+  "installCommand": "pnpm install",
   "outputDirectory": "artifacts/inventory-app/dist/public",
   "cleanUrls": true,
   "rewrites": [
