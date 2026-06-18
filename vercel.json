@@ -1,7 +1,7 @@
 {
-  "buildCommand": "pnpm --filter @workspace/inventory-app run build",
+  "buildCommand": "pnpm --filter @workspace/inventory-app run build && rm -rf public && cp -r artifacts/inventory-app/dist/public public",
   "installCommand": "pnpm install",
-  "outputDirectory": "artifacts/inventory-app/dist/public",
+  "outputDirectory": "public",
   "cleanUrls": true,
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/index.py" },
