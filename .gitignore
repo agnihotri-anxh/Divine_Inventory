@@ -66,3 +66,11 @@ __pycache__/
 # Documentation and temporary files
 *.md
 
+# Python local lock and workspace files (not used by api-server deploy)
+uv.lock
+pyproject.toml
+main.py
+
+# Attached Assets
+attached_assets/
+
