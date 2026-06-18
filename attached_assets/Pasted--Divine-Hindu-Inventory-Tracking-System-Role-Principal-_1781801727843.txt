@@ -1,0 +1,1029 @@
+# Divine Hindu Inventory Tracking System
+
+**Role:** Principal Software Architect
+**Goal:** Real-time SKU-level inventory visibility with accurate stock reconciliation across sales, returns, warehouse operations, damaged stock, and dispatch.
+
+---
+
+# 1. High-Level Architecture
+
+## Architecture Principles
+
+1. **Inventory Ledger is the Single Source of Truth**
+
+   * Never update stock directly.
+   * Every stock change creates a ledger transaction.
+
+2. **Event-Driven Inventory**
+
+   * Sales, returns, dispatches, inward receipts, and damages generate events.
+   * Events create stock movement records.
+   * Stock balances are derived from movements.
+
+3. **ACID Transactions**
+
+   * PostgreSQL ensures inventory consistency.
+   * Row-level locking prevents overselling.
+
+4. **Real-Time Visibility**
+
+   * APIs update stock instantly.
+   * Dashboard reads current balances.
+
+---
+
+# System Architecture Diagram (Mermaid)
+
+```mermaid
+flowchart TB
+
+    A[Sales Channels
+    Website
+    Amazon
+    Flipkart
+    POS]
+
+    B[Warehouse Operations
+    GRN
+    Dispatch
+    Transfer
+    Damage]
+
+    C[Returns System]
+
+    A --> API
+    B --> API
+    C --> API
+
+    API[FastAPI Backend]
+
+    API --> DB[(PostgreSQL)]
+
+    API --> REDIS[(Redis)]
+
+    API --> CELERY[Celery Workers]
+
+    CELERY --> REPORTS[Report Engine]
+
+    CELERY --> ALERTS[Alert Engine]
+
+    REPORTS --> EMAIL[Email Reports]
+
+    ALERTS --> WA[WhatsApp/SMS]
+
+    DB --> DASHBOARD
+
+    DASHBOARD[Admin Dashboard
+    Streamlit / React]
+
+    REPORTS --> DASHBOARD
+```
+
+---
+
+# 2. Inventory Data Model
+
+---
+
+# Products Table
+
+Stores SKU master data.
+
+```sql
+products
+--------
+id (PK)
+sku_code (UNIQUE)
+product_name
+category
+brand
+unit
+minimum_stock
+reorder_stock
+is_active
+created_at
+updated_at
+```
+
+Indexes:
+
+```sql
+INDEX(sku_code)
+INDEX(category)
+```
+
+---
+
+# Warehouses Table
+
+```sql
+warehouses
+-----------
+id (PK)
+warehouse_name
+location
+warehouse_type
+created_at
+```
+
+Example:
+
+* Bangalore Main Warehouse
+* Quarantine Zone
+* Damaged Stock Area
+
+---
+
+# Inventory Balance Table
+
+Fast stock lookup table.
+
+```sql
+inventory_balance
+-----------------
+id (PK)
+
+product_id FK
+warehouse_id FK
+
+available_qty
+reserved_qty
+damaged_qty
+expired_qty
+returned_qty
+
+last_updated
+```
+
+Unique Index:
+
+```sql
+(product_id, warehouse_id)
+```
+
+Purpose:
+
+Avoid calculating stock from millions of transactions every time.
+
+---
+
+# Stock Movement Table
+
+Every inventory event is stored here.
+
+```sql
+stock_movements
+----------------
+
+id (PK)
+
+movement_id UUID UNIQUE
+
+product_id FK
+
+warehouse_id FK
+
+movement_type
+
+qty
+
+reference_type
+
+reference_id
+
+source_location
+
+destination_location
+
+created_by
+
+created_at
+```
+
+Movement Types:
+
+```text
+INWARD
+
+SALE
+
+RETURN
+
+DISPATCH
+
+TRANSFER_IN
+
+TRANSFER_OUT
+
+DAMAGE
+
+EXPIRED
+
+ADJUSTMENT
+```
+
+---
+
+# Inventory Ledger Table
+
+Immutable audit trail.
+
+```sql
+inventory_ledger
+----------------
+
+id (PK)
+
+product_id
+
+warehouse_id
+
+movement_id
+
+opening_qty
+
+change_qty
+
+closing_qty
+
+transaction_time
+```
+
+Indexes:
+
+```sql
+(product_id, transaction_time)
+
+(warehouse_id, transaction_time)
+```
+
+This table provides complete audit history.
+
+---
+
+# Sales Orders
+
+```sql
+sales_orders
+------------
+
+id
+
+order_no
+
+channel
+
+status
+
+created_at
+```
+
+---
+
+# Sales Order Items
+
+```sql
+sales_order_items
+-----------------
+
+id
+
+order_id
+
+product_id
+
+qty
+```
+
+---
+
+# Returns Table
+
+```sql
+returns
+--------
+
+id
+
+return_number
+
+order_id
+
+product_id
+
+qty
+
+return_reason
+
+qc_status
+
+created_at
+```
+
+---
+
+# Stock Reconciliation Table
+
+```sql
+stock_reconciliation
+--------------------
+
+id
+
+product_id
+
+warehouse_id
+
+system_qty
+
+physical_qty
+
+variance
+
+status
+
+created_at
+```
+
+---
+
+# Alerts Table
+
+```sql
+alerts
+-------
+
+id
+
+product_id
+
+alert_type
+
+current_stock
+
+threshold
+
+status
+
+created_at
+```
+
+---
+
+# 3. Real-Time Inventory Workflow
+
+## Stock Equation
+
+Every SKU follows:
+
+```text
+Closing Stock
+=
+Opening Stock
++
+Inward Stock
+-
+Outward Stock
+```
+
+Expanded version:
+
+```text
+Closing Stock
+
+=
+
+Opening Stock
+
++ Purchase Receipts
+
++ Customer Returns
+
++ Transfer In
+
+-
+
+Sales
+
+-
+
+Dispatch
+
+-
+
+ Damaged
+
+-
+
+Expired
+
+-
+
+Transfer Out
+```
+
+---
+
+# Inventory Event Flow
+
+Example:
+
+Order Received
+
+```text
+Order #1001
+
+SKU-A
+
+Qty = 5
+```
+
+Flow:
+
+```text
+1. Create SALE event
+
+2. Lock SKU row
+
+3. Verify stock available
+
+4. Deduct quantity
+
+5. Insert ledger entry
+
+6. Commit transaction
+
+7. Publish notification
+```
+
+---
+
+# Daily Closing Stock Algorithm
+
+Python Pseudo Code
+
+```python
+def calculate_closing_stock(product_id, date):
+
+    opening = get_previous_day_closing(product_id)
+
+    inward = sum_movements(
+        product_id,
+        ["INWARD", "RETURN", "TRANSFER_IN"]
+    )
+
+    outward = sum_movements(
+        product_id,
+        [
+            "SALE",
+            "DISPATCH",
+            "TRANSFER_OUT",
+            "DAMAGE",
+            "EXPIRED"
+        ]
+    )
+
+    closing = opening + inward - outward
+
+    return closing
+```
+
+---
+
+# 4. Return Handling Workflow
+
+## Step 1
+
+Customer return received.
+
+```text
+Order: ORD-1001
+
+SKU: A123
+
+Qty: 2
+```
+
+---
+
+## Step 2
+
+Move stock to Quarantine
+
+```text
+Main Warehouse
+      ↓
+Quarantine Zone
+```
+
+Inventory Status:
+
+```text
+Available = No
+
+Sellable = No
+```
+
+---
+
+## Step 3
+
+Quality Check
+
+QC outcomes:
+
+### Case A
+
+Good condition
+
+```text
+Quarantine
+    →
+Available Stock
+```
+
+Movement:
+
+```text
+RETURN_APPROVED
+```
+
+---
+
+### Case B
+
+Damaged
+
+```text
+Quarantine
+    →
+Damaged Zone
+```
+
+Movement:
+
+```text
+DAMAGE
+```
+
+---
+
+### Case C
+
+Expired
+
+```text
+Quarantine
+    →
+Expired Zone
+```
+
+Movement:
+
+```text
+EXPIRED
+```
+
+---
+
+## Return Processing Pseudocode
+
+```python
+def process_return(return_id):
+
+    move_to_quarantine()
+
+    qc_result = perform_qc()
+
+    if qc_result == "GOOD":
+        return_to_sellable_stock()
+
+    elif qc_result == "DAMAGED":
+        move_to_damage_stock()
+
+    elif qc_result == "EXPIRED":
+        move_to_expired_stock()
+```
+
+---
+
+# 5. Channel Alignment Strategy
+
+Challenge:
+
+```text
+Amazon Order
+
+Website Order
+
+POS Sale
+
+All arrive simultaneously.
+```
+
+Potential issue:
+
+Overselling.
+
+---
+
+## Solution
+
+### Row-Level Locking
+
+```sql
+SELECT *
+FROM inventory_balance
+WHERE product_id = ?
+FOR UPDATE;
+```
+
+This locks inventory until transaction completes.
+
+---
+
+## Transaction Flow
+
+```python
+BEGIN
+
+Lock Inventory Row
+
+Check Available Qty
+
+Reserve Qty
+
+Create Movement
+
+Create Ledger
+
+Update Balance
+
+COMMIT
+```
+
+Guarantees:
+
+* No duplicate deductions
+* No negative inventory
+* No race conditions
+
+---
+
+# Idempotency Protection
+
+Each event gets:
+
+```text
+event_id
+```
+
+Example:
+
+```text
+SALE_1001
+
+RETURN_1001
+```
+
+Before processing:
+
+```python
+if event_exists(event_id):
+    skip()
+```
+
+Prevents double counting.
+
+---
+
+# 6. Celery + Redis Background Jobs
+
+## Why Celery?
+
+Heavy tasks should not block APIs.
+
+Examples:
+
+* Daily reports
+* Weekly reports
+* Bulk dispatch
+* Alert generation
+* Reconciliation analysis
+
+---
+
+## Scheduled Jobs
+
+### Daily
+
+```text
+11:59 PM
+
+Generate Closing Stock Report
+```
+
+### Weekly
+
+```text
+Sunday 11 PM
+
+Warehouse Performance
+```
+
+### Monthly
+
+```text
+Month End
+
+Inventory Valuation
+```
+
+---
+
+# Celery Beat Schedule
+
+```python
+CELERY_BEAT_SCHEDULE = {
+
+    "daily-report": {
+        "task": "daily_report",
+        "schedule": crontab(hour=23, minute=59)
+    },
+
+    "stock-alert": {
+        "task": "check_low_stock",
+        "schedule": crontab(minute="*/15")
+    }
+}
+```
+
+---
+
+# 7. Reporting Engine
+
+Using:
+
+```text
+Pandas
+NumPy
+PostgreSQL
+```
+
+Metrics:
+
+### Daily Report
+
+```text
+Opening Stock
+
+Sales
+
+Returns
+
+Damage
+
+Dispatch
+
+Closing Stock
+```
+
+---
+
+### Weekly Report
+
+```text
+Top Selling SKUs
+
+Low Stock SKUs
+
+Returns %
+
+Damaged %
+```
+
+---
+
+### Monthly Report
+
+```text
+Inventory Value
+
+Slow Moving Products
+
+Dead Stock
+
+Shrinkage
+```
+
+---
+
+# Example Dashboard KPIs
+
+```text
+Current Inventory Value
+
+Low Stock Products
+
+Returns Today
+
+Damaged Stock
+
+Orders Pending Dispatch
+
+Stock Variance
+```
+
+---
+
+# 8. Low Stock Alert Engine
+
+Every 15 minutes:
+
+```python
+if stock <= minimum_stock:
+    create_alert()
+```
+
+Alert Channels:
+
+### Email
+
+```python
+smtplib
+```
+
+### WhatsApp
+
+```text
+Twilio WhatsApp API
+```
+
+### SMS
+
+```text
+MSG91
+```
+
+### Slack
+
+```text
+Webhook
+```
+
+Alert Example:
+
+```text
+ALERT
+
+SKU:
+AGARBATTI-001
+
+Current Stock:
+12
+
+Minimum Stock:
+20
+
+Action:
+Replenishment Required
+```
+
+---
+
+# 9. Reconciliation & Auditing
+
+## Daily Cycle Count
+
+Warehouse staff scans stock.
+
+Using:
+
+```text
+Barcode Scanner
+
+Mobile App
+```
+
+Captured:
+
+```text
+SKU
+
+Physical Qty
+```
+
+---
+
+## Reconciliation Logic
+
+```python
+variance = physical_qty - system_qty
+```
+
+Example:
+
+```text
+System Qty = 100
+
+Physical Qty = 95
+
+Variance = -5
+```
+
+---
+
+## Automatic Resolution Flow
+
+```text
+Variance Found
+        ↓
+Create Reconciliation Record
+        ↓
+Manager Approval
+        ↓
+Generate ADJUSTMENT Movement
+        ↓
+Ledger Entry Created
+```
+
+Nothing changes inventory directly.
+
+Everything goes through movement records.
+
+---
+
+# 10. Recommended Frontend & Operational Tools
+
+## Option 1 (Fastest Deployment)
+
+### Admin Dashboard
+
+```text
+Streamlit
+```
+
+Pros:
+
+* Python only
+* Quick development
+* Excellent internal tool
+
+---
+
+## Option 2 (Production Grade)
+
+### Frontend
+
+```text
+React + Material UI
+```
+
+### Backend
+
+```text
+FastAPI
+```
+
+### Database
+
+```text
+PostgreSQL
+```
+
+Best for long-term scale.
+
+---
+
+## Warehouse Mobile Operations
+
+Use:
+
+```text
+React Native
+```
+
+Features:
+
+* Barcode Scan
+* Receive Goods
+* Dispatch
+* Stock Count
+* Return QC
+
+---
+
+# Final Production Architecture
+
+**Backend:** FastAPI
+**Database:** PostgreSQL
+**ORM:** SQLAlchemy
+**Cache/Queue:** Redis
+**Workers:** Celery + Celery Beat
+**Reporting:** Pandas + NumPy
+**Notifications:** Email + WhatsApp + Slack
+**Dashboard:** React (or Streamlit MVP)
+**Mobile Warehouse App:** React Native
+**Infrastructure:** Docker + Nginx + Ubuntu VPS/AWS EC2
+
+This architecture can comfortably support **50,000+ SKUs, multiple warehouses, real-time stock updates, audit-grade traceability, automated reconciliation, and D2C/eCommerce integrations** while keeping the workflow simple enough for warehouse operators.

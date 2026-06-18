@@ -1,22 +1,39 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Divine Hindu Inventory Tracking System API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: products
+    description: Product SKU management
+  - name: warehouses
+    description: Warehouse management
+  - name: inventory
+    description: Inventory balance and movements
+  - name: ledger
+    description: Immutable inventory ledger
+  - name: orders
+    description: Sales order management
+  - name: returns
+    description: Return and QC operations
+  - name: reconciliation
+    description: Stock reconciliation
+  - name: alerts
+    description: Low stock alerts
+  - name: dashboard
+    description: Dashboard summary endpoints
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +41,874 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Products ──────────────────────────────────────────────
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List all products
+      parameters:
+        - in: query
+          name: search
+          schema: { type: string }
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: isActive
+          schema: { type: boolean }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50 }
+      responses:
+        "200":
+          description: List of products
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total, page, limit]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Product" }
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+    post:
+      operationId: createProduct
+      tags: [products]
+      summary: Create a new product SKU
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+
+  /products/{id}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: Get a product by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Product
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "404":
+          description: Not found
+    patch:
+      operationId: updateProduct
+      tags: [products]
+      summary: Update a product
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductUpdate" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+    delete:
+      operationId: deactivateProduct
+      tags: [products]
+      summary: Soft-delete (deactivate) a product
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Deactivated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+
+  # ── Warehouses ────────────────────────────────────────────
+  /warehouses:
+    get:
+      operationId: listWarehouses
+      tags: [warehouses]
+      summary: List all warehouses
+      responses:
+        "200":
+          description: List of warehouses
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Warehouse" }
+    post:
+      operationId: createWarehouse
+      tags: [warehouses]
+      summary: Create a new warehouse
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WarehouseInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Warehouse" }
+
+  /warehouses/{id}:
+    get:
+      operationId: getWarehouse
+      tags: [warehouses]
+      summary: Get a warehouse by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Warehouse
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Warehouse" }
+
+  # ── Inventory Balance ─────────────────────────────────────
+  /inventory:
+    get:
+      operationId: listInventory
+      tags: [inventory]
+      summary: List inventory balances with product and warehouse info
+      parameters:
+        - in: query
+          name: warehouseId
+          schema: { type: integer }
+        - in: query
+          name: productId
+          schema: { type: integer }
+        - in: query
+          name: lowStock
+          schema: { type: boolean }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50 }
+      responses:
+        "200":
+          description: Inventory balances
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total, page, limit]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/InventoryBalance" }
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+
+  # ── Stock Movements ───────────────────────────────────────
+  /inventory/movements:
+    get:
+      operationId: listMovements
+      tags: [inventory]
+      summary: List stock movements
+      parameters:
+        - in: query
+          name: productId
+          schema: { type: integer }
+        - in: query
+          name: warehouseId
+          schema: { type: integer }
+        - in: query
+          name: movementType
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50 }
+      responses:
+        "200":
+          description: Stock movements
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total, page, limit]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/StockMovement" }
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+    post:
+      operationId: createMovement
+      tags: [inventory]
+      summary: Create a stock movement (inward, sale, transfer, damage, etc.)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MovementInput" }
+      responses:
+        "201":
+          description: Movement created and ledger updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockMovement" }
+        "409":
+          description: Duplicate movement ID (idempotency)
+        "422":
+          description: Insufficient stock
+
+  # ── Inventory Ledger ──────────────────────────────────────
+  /ledger:
+    get:
+      operationId: listLedger
+      tags: [ledger]
+      summary: List ledger entries (immutable audit trail)
+      parameters:
+        - in: query
+          name: productId
+          schema: { type: integer }
+        - in: query
+          name: warehouseId
+          schema: { type: integer }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50 }
+      responses:
+        "200":
+          description: Ledger entries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total, page, limit]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/LedgerEntry" }
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+
+  # ── Sales Orders ──────────────────────────────────────────
+  /orders:
+    get:
+      operationId: listOrders
+      tags: [orders]
+      summary: List sales orders
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: channel
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50 }
+      responses:
+        "200":
+          description: Orders
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total, page, limit]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/SalesOrder" }
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+    post:
+      operationId: createOrder
+      tags: [orders]
+      summary: Create a sales order (triggers stock reservation)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrderInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SalesOrder" }
+        "422":
+          description: Insufficient stock
+
+  /orders/{id}:
+    get:
+      operationId: getOrder
+      tags: [orders]
+      summary: Get order by ID with items
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Order with items
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SalesOrder" }
+
+  # ── Returns ───────────────────────────────────────────────
+  /returns:
+    get:
+      operationId: listReturns
+      tags: [returns]
+      summary: List all returns
+      parameters:
+        - in: query
+          name: qcStatus
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50 }
+      responses:
+        "200":
+          description: Returns
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total, page, limit]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Return" }
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+    post:
+      operationId: createReturn
+      tags: [returns]
+      summary: Create a customer return (items move to quarantine)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReturnInput" }
+      responses:
+        "201":
+          description: Return created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Return" }
+
+  /returns/{id}/qc:
+    patch:
+      operationId: updateReturnQc
+      tags: [returns]
+      summary: Update QC status (pass/fail damaged/fail expired)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReturnQcUpdate" }
+      responses:
+        "200":
+          description: QC status updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Return" }
+
+  # ── Reconciliation ────────────────────────────────────────
+  /reconciliation:
+    get:
+      operationId: listReconciliation
+      tags: [reconciliation]
+      summary: List reconciliation records
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: warehouseId
+          schema: { type: integer }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50 }
+      responses:
+        "200":
+          description: Reconciliation records
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total, page, limit]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Reconciliation" }
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+    post:
+      operationId: createReconciliation
+      tags: [reconciliation]
+      summary: Submit a physical count for reconciliation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReconciliationInput" }
+      responses:
+        "201":
+          description: Reconciliation created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reconciliation" }
+
+  /reconciliation/{id}/approve:
+    patch:
+      operationId: approveReconciliation
+      tags: [reconciliation]
+      summary: Approve variance and apply ADJUSTMENT movement
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Approved and adjustment applied
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reconciliation" }
+
+  # ── Alerts ────────────────────────────────────────────────
+  /alerts:
+    get:
+      operationId: listAlerts
+      tags: [alerts]
+      summary: List active alerts (low stock, etc.)
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50 }
+      responses:
+        "200":
+          description: Alerts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total, page, limit]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Alert" }
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+
+  # ── Dashboard (wow endpoints) ─────────────────────────────
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get key dashboard metrics
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DashboardSummary" }
+
+  /dashboard/low-stock:
+    get:
+      operationId: getLowStockItems
+      tags: [dashboard]
+      summary: Get products at or below minimum stock level
+      responses:
+        "200":
+          description: Low stock items
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/LowStockItem" }
+
+  /dashboard/recent-activity:
+    get:
+      operationId: getRecentActivity
+      tags: [dashboard]
+      summary: Get recent stock movement activity
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/StockMovement" }
+
+  /dashboard/warehouse-breakdown:
+    get:
+      operationId: getWarehouseBreakdown
+      tags: [dashboard]
+      summary: Get inventory totals broken down by warehouse
+      responses:
+        "200":
+          description: Warehouse breakdown
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WarehouseBreakdown" }
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
-        status:
-          type: string
-      required:
-        - status
+        status: { type: string }
 
+    # ── Product schemas ──────────────────────────────────────
+    Product:
+      type: object
+      required: [id, skuCode, productName, category, brand, unit, minimumStock, reorderStock, isActive, createdAt]
+      properties:
+        id: { type: integer }
+        skuCode: { type: string }
+        productName: { type: string }
+        category: { type: string }
+        brand: { type: string }
+        unit: { type: string }
+        minimumStock: { type: integer }
+        reorderStock: { type: integer }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: ["string", "null"], format: date-time }
+
+    ProductInput:
+      type: object
+      required: [skuCode, productName, category, brand, unit, minimumStock, reorderStock]
+      properties:
+        skuCode: { type: string }
+        productName: { type: string }
+        category: { type: string }
+        brand: { type: string }
+        unit: { type: string }
+        minimumStock: { type: integer }
+        reorderStock: { type: integer }
+
+    ProductUpdate:
+      type: object
+      properties:
+        productName: { type: string }
+        category: { type: string }
+        brand: { type: string }
+        unit: { type: string }
+        minimumStock: { type: integer }
+        reorderStock: { type: integer }
+        isActive: { type: boolean }
+
+    # ── Warehouse schemas ────────────────────────────────────
+    Warehouse:
+      type: object
+      required: [id, warehouseName, location, warehouseType, createdAt]
+      properties:
+        id: { type: integer }
+        warehouseName: { type: string }
+        location: { type: string }
+        warehouseType: { type: string, enum: [MAIN, QUARANTINE, DAMAGED] }
+        createdAt: { type: string, format: date-time }
+
+    WarehouseInput:
+      type: object
+      required: [warehouseName, location, warehouseType]
+      properties:
+        warehouseName: { type: string }
+        location: { type: string }
+        warehouseType: { type: string, enum: [MAIN, QUARANTINE, DAMAGED] }
+
+    # ── Inventory schemas ────────────────────────────────────
+    InventoryBalance:
+      type: object
+      required: [id, productId, warehouseId, availableQty, reservedQty, damagedQty, expiredQty, returnedQty, lastUpdated]
+      properties:
+        id: { type: integer }
+        productId: { type: integer }
+        warehouseId: { type: integer }
+        availableQty: { type: integer }
+        reservedQty: { type: integer }
+        damagedQty: { type: integer }
+        expiredQty: { type: integer }
+        returnedQty: { type: integer }
+        lastUpdated: { type: string, format: date-time }
+        product: { $ref: "#/components/schemas/Product" }
+        warehouse: { $ref: "#/components/schemas/Warehouse" }
+
+    StockMovement:
+      type: object
+      required: [id, movementId, productId, warehouseId, movementType, qty, referenceType, referenceId, createdAt]
+      properties:
+        id: { type: integer }
+        movementId: { type: string }
+        productId: { type: integer }
+        warehouseId: { type: integer }
+        movementType:
+          type: string
+          enum: [INWARD, SALE, RETURN, DISPATCH, TRANSFER_IN, TRANSFER_OUT, DAMAGE, EXPIRED, ADJUSTMENT]
+        qty: { type: integer }
+        referenceType: { type: string }
+        referenceId: { type: string }
+        sourceLocation: { type: ["string", "null"] }
+        destinationLocation: { type: ["string", "null"] }
+        createdBy: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        product: { $ref: "#/components/schemas/Product" }
+        warehouse: { $ref: "#/components/schemas/Warehouse" }
+
+    MovementInput:
+      type: object
+      required: [movementId, productId, warehouseId, movementType, qty, referenceType, referenceId]
+      properties:
+        movementId: { type: string }
+        productId: { type: integer }
+        warehouseId: { type: integer }
+        movementType:
+          type: string
+          enum: [INWARD, SALE, RETURN, DISPATCH, TRANSFER_IN, TRANSFER_OUT, DAMAGE, EXPIRED, ADJUSTMENT]
+        qty: { type: integer }
+        referenceType: { type: string }
+        referenceId: { type: string }
+        sourceLocation: { type: string }
+        destinationLocation: { type: string }
+        createdBy: { type: string }
+
+    # ── Ledger schemas ────────────────────────────────────────
+    LedgerEntry:
+      type: object
+      required: [id, productId, warehouseId, movementId, openingQty, changeQty, closingQty, transactionTime]
+      properties:
+        id: { type: integer }
+        productId: { type: integer }
+        warehouseId: { type: integer }
+        movementId: { type: string }
+        openingQty: { type: integer }
+        changeQty: { type: integer }
+        closingQty: { type: integer }
+        transactionTime: { type: string, format: date-time }
+        product: { $ref: "#/components/schemas/Product" }
+        warehouse: { $ref: "#/components/schemas/Warehouse" }
+
+    # ── Order schemas ─────────────────────────────────────────
+    SalesOrderItem:
+      type: object
+      required: [id, orderId, productId, warehouseId, qty]
+      properties:
+        id: { type: integer }
+        orderId: { type: integer }
+        productId: { type: integer }
+        warehouseId: { type: integer }
+        qty: { type: integer }
+        product: { $ref: "#/components/schemas/Product" }
+
+    SalesOrder:
+      type: object
+      required: [id, orderNo, channel, status, createdAt]
+      properties:
+        id: { type: integer }
+        orderNo: { type: string }
+        channel: { type: string, enum: [WEBSITE, AMAZON, FLIPKART, POS, OTHER] }
+        status: { type: string, enum: [PENDING, CONFIRMED, DISPATCHED, CANCELLED] }
+        createdAt: { type: string, format: date-time }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/SalesOrderItem" }
+
+    OrderItemInput:
+      type: object
+      required: [productId, warehouseId, qty]
+      properties:
+        productId: { type: integer }
+        warehouseId: { type: integer }
+        qty: { type: integer }
+
+    OrderInput:
+      type: object
+      required: [channel, items]
+      properties:
+        channel: { type: string, enum: [WEBSITE, AMAZON, FLIPKART, POS, OTHER] }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/OrderItemInput" }
+
+    # ── Return schemas ────────────────────────────────────────
+    Return:
+      type: object
+      required: [id, returnNumber, productId, warehouseId, qty, returnReason, qcStatus, createdAt]
+      properties:
+        id: { type: integer }
+        returnNumber: { type: string }
+        orderId: { type: ["integer", "null"] }
+        productId: { type: integer }
+        warehouseId: { type: integer }
+        qty: { type: integer }
+        returnReason: { type: string }
+        qcStatus: { type: string, enum: [PENDING, GOOD, DAMAGED, EXPIRED] }
+        createdAt: { type: string, format: date-time }
+        product: { $ref: "#/components/schemas/Product" }
+        warehouse: { $ref: "#/components/schemas/Warehouse" }
+
+    ReturnInput:
+      type: object
+      required: [productId, warehouseId, qty, returnReason]
+      properties:
+        orderId: { type: integer }
+        productId: { type: integer }
+        warehouseId: { type: integer }
+        qty: { type: integer }
+        returnReason: { type: string }
+
+    ReturnQcUpdate:
+      type: object
+      required: [qcStatus]
+      properties:
+        qcStatus: { type: string, enum: [GOOD, DAMAGED, EXPIRED] }
+
+    # ── Reconciliation schemas ───────────────────────────────
+    Reconciliation:
+      type: object
+      required: [id, productId, warehouseId, systemQty, physicalQty, variance, status, createdAt]
+      properties:
+        id: { type: integer }
+        productId: { type: integer }
+        warehouseId: { type: integer }
+        systemQty: { type: integer }
+        physicalQty: { type: integer }
+        variance: { type: integer }
+        status: { type: string, enum: [PENDING, APPROVED] }
+        createdAt: { type: string, format: date-time }
+        product: { $ref: "#/components/schemas/Product" }
+        warehouse: { $ref: "#/components/schemas/Warehouse" }
+
+    ReconciliationInput:
+      type: object
+      required: [productId, warehouseId, physicalQty]
+      properties:
+        productId: { type: integer }
+        warehouseId: { type: integer }
+        physicalQty: { type: integer }
+
+    # ── Alert schemas ─────────────────────────────────────────
+    Alert:
+      type: object
+      required: [id, productId, alertType, currentStock, threshold, status, createdAt]
+      properties:
+        id: { type: integer }
+        productId: { type: integer }
+        alertType: { type: string }
+        currentStock: { type: integer }
+        threshold: { type: integer }
+        status: { type: string, enum: [ACTIVE, RESOLVED] }
+        createdAt: { type: string, format: date-time }
+        product: { $ref: "#/components/schemas/Product" }
+
+    # ── Dashboard schemas ─────────────────────────────────────
+    DashboardSummary:
+      type: object
+      required: [totalSkus, lowStockCount, pendingDispatches, todayReturns, pendingQcCount, pendingReconciliations, totalAvailableUnits, activeAlerts]
+      properties:
+        totalSkus: { type: integer }
+        lowStockCount: { type: integer }
+        pendingDispatches: { type: integer }
+        todayReturns: { type: integer }
+        pendingQcCount: { type: integer }
+        pendingReconciliations: { type: integer }
+        totalAvailableUnits: { type: integer }
+        activeAlerts: { type: integer }
+
+    LowStockItem:
+      type: object
+      required: [productId, skuCode, productName, warehouseId, warehouseName, availableQty, minimumStock]
+      properties:
+        productId: { type: integer }
+        skuCode: { type: string }
+        productName: { type: string }
+        warehouseId: { type: integer }
+        warehouseName: { type: string }
+        availableQty: { type: integer }
+        minimumStock: { type: integer }
+        reorderStock: { type: integer }
+
+    WarehouseBreakdown:
+      type: object
+      required: [warehouseId, warehouseName, warehouseType, totalAvailable, totalReserved, totalDamaged, skuCount]
+      properties:
+        warehouseId: { type: integer }
+        warehouseName: { type: string }
+        warehouseType: { type: string }
+        totalAvailable: { type: integer }
+        totalReserved: { type: integer }
+        totalDamaged: { type: integer }
+        skuCount: { type: integer }
