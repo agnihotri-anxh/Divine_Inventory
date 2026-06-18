@@ -1,5 +1,6 @@
 import { db, productsTable, warehousesTable, inventoryBalanceTable, stockMovementsTable, inventoryLedgerTable, alertsTable } from "@workspace/db";
 import { randomUUID } from "crypto";
+import { and, eq } from "drizzle-orm";
 
 async function seed() {
   console.log("Seeding database...");
@@ -102,10 +103,9 @@ async function seed() {
     await db.update(inventoryBalanceTable)
       .set({ availableQty: Math.floor(product.minimumStock / 3) })
       .where(
-        // @ts-ignore
-        require("drizzle-orm").and(
-          require("drizzle-orm").eq(inventoryBalanceTable.productId, product.id),
-          require("drizzle-orm").eq(inventoryBalanceTable.warehouseId, wh1.id),
+        and(
+          eq(inventoryBalanceTable.productId, product.id),
+          eq(inventoryBalanceTable.warehouseId, wh1.id),
         )
       );
 
