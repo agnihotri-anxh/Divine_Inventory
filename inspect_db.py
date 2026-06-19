@@ -2,8 +2,8 @@ import os
 import sys
 from dotenv import load_dotenv
 
-# Add the api-server directory to sys.path to resolve local imports
-api_server_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "artifacts/api-server"))
+# Add the api directory to sys.path to resolve local imports
+api_server_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "api"))
 sys.path.insert(0, api_server_path)
 
 from database import SessionLocal
